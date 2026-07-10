@@ -1,0 +1,44 @@
+name: tesla
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: register, exchange, or refresh
+        required: true
+      code:
+        description: auth code (exchange) or refresh token (refresh)
+        required: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: run
+        env:
+          CLIENT_ID: ${{ secrets.TESLA_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.TESLA_CLIENT_SECRET }}
+          ACTION: ${{ github.event.inputs.action }}
+          CODE: ${{ github.event.inputs.code }}
+        run: |
+          set -e
+          AUD=https://fleet-api.prd.eu.vn.cloud.tesla.com
+          TOK=https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token
+          if [ "$ACTION" = register ]; then
+            PT=$(curl -s -X POST --data-urlencode grant_type=client_credentials --data-urlencode client_id="$CLIENT_ID" --data-urlencode client_secret="$CLIENT_SECRET" --data-urlencode scope=openid --data-urlencode audience=$AUD $TOK | python3 -c 'import sys,json;print(json.load(sys.stdin).get("access_token",""))')
+            test -n "$PT"
+            curl -s -X POST -H "Authorization: Bearer $PT" -H 'Content-Type: application/json' -d '{"domain":"wzfmdrf7m8-dev.github.io"}' $AUD/api/1/partner_accounts
+            echo
+            curl -s -H "Authorization: Bearer $PT" "$AUD/api/1/partner_accounts/public_key?domain=wzfmdrf7m8-dev.github.io"
+          else
+            if [ "$ACTION" = exchange ]; then
+              RESP=$(curl -s -X POST --data-urlencode grant_type=authorization_code --data-urlencode client_id="$CLIENT_ID" --data-urlencode client_secret="$CLIENT_SECRET" --data-urlencode code="$CODE" --data-urlencode audience=$AUD --data-urlencode redirect_uri=https://wzfmdrf7m8-dev.github.io/callback $TOK)
+            else
+              RESP=$(curl -s -X POST --data-urlencode grant_type=refresh_token --data-urlencode client_id="$CLIENT_ID" --data-urlencode refresh_token="$CODE" $TOK)
+            fi
+            echo "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUF6UjJFbzBiYWcvczNBc1BqQVJHTApzSlQ1YXFOOXhkM2M5NE8rT0JLSEJtNnlGWWZQbCt5K2V3RVNGaE5SLzk2RUFmSFRsWEE2bUc1ZHVBSmNGcmZ5CjN1MXQzTU44b0dmU1h6MUFWSHpnMHVkSWVCbHJOQm1Oekx0UzBxSklTVEdLN3RmOEpJakozSlhlZnRNNXF5K00KWmN5YUF4aXo3YWoveTlZNWY5SUc5a21mdEMrMTVhREFsczErbGZDb3BLVW5TcHp1NnpEUTc0bUhYU0Rwd09vUQpUOWQ3NFU4NW9lUDNNREJyUVFEeDVIVzdmWlNtWDNTRnB6VTVRQ2R3RG5YTHY0N24vQm9RcmtlaHRQMTdYQi85CjF4aUJsUzBGVUtkL0xjOFpBUjNqREZZL2hjeDhOVHNiV295SDFkSWdMeFU0QVllREl2YjMwM21jSEdYeFpPcDAKcHdJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==" | base64 -d > pub.pem
+            printf '%s' "$RESP" > t.json
+            openssl rand -hex 32 > k.txt
+            openssl enc -aes-256-cbc -pbkdf2 -pass file:k.txt -in t.json -out t.enc
+            openssl pkeyutl -encrypt -pubin -inkey pub.pem -in k.txt -out k.enc
+            echo KEY_ENC=$(base64 -w0 k.enc)
+            echo DATA_ENC=$(base64 -w0 t.enc)
+          fi
