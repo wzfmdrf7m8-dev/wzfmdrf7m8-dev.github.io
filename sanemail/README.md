@@ -1,46 +1,81 @@
-# SaneMail: a SaneBox-style filter you host yourself
+# SaneMail
 
-SaneMail is a Google Apps Script that runs inside your own Gmail or Google Workspace account. It works like SaneBox, without a third party reading your mail.
+SaneMail does the same job as SaneBox, but you run it yourself. It works with:
 
-| SaneBox | SaneMail |
+- **your own-domain mail** (randlefamily.com) through IMAP: iCloud+ custom domains, Fastmail, cPanel hosts and other IMAP providers
+- **Office 365 / Outlook** through Microsoft Graph
+
+Sorting happens **on the mail server**, so the folders look the same in Apple Mail on every device, in Outlook, and in webmail. It runs every 30 minutes on GitHub Actions in a **private** repository. There is no server to look after and no third party sees your mail.
+
+| Folder | What goes there |
 |---|---|
-| Important mail stays in the Inbox | Mail from people you have written to or replied to, your own domain, and VIPs stays in the Inbox |
-| SaneLater | `@SaneLater`: unknown senders, archived out of the Inbox |
-| SaneNews | `@SaneNews`: newsletters and bulk mail, detected from List-Unsubscribe, Precedence and similar headers |
-| SaneBlackHole | `@SaneBlackHole`: put one thread here and that sender's mail goes to Trash from then on |
-| Training | Move a thread into or out of a Sane folder and SaneMail remembers the sender |
-| SaneTomorrow / SaneNextWeek | `@SaneTomorrow` and `@SaneNextWeek`: the thread is hidden, then comes back unread at 7am |
-| SaneNoReplies | `@SaneNoReplies`: mail you sent that has had no reply for 3 days |
-| Daily digest | Morning email listing what was filed, with **→ Inbox** and **Black hole** links |
-| Dashboard | A web page with daily counts, the percentage of mail kept out of the Inbox, and your sender rules |
+| **Inbox** | People you've emailed, replies to your threads, your own domain, VIPs, flagged mail |
+| **SaneLater** | Senders you've never written to |
+| **SaneNews** | Newsletters and bulk mail, detected from List-Unsubscribe, bulk mailer and no-reply addresses |
+| **SaneBlackHole** | Drop one message here and that sender goes straight to Trash from then on |
+| **SaneTomorrow / SaneNextWeek** | Snooze: the message comes back to the Inbox unread at 7am |
 
-## Install (about 5 minutes per inbox)
+**Training.** To teach SaneMail, drag a message into SaneLater, SaneNews or SaneBlackHole, or drag it from those folders back to the Inbox. SaneMail remembers the sender in `rules.json`. Those rules apply to **all** your accounts, and you can edit the file on GitHub. You can also add whole domains, for example `"@amazon.com": {"folder": "news"}`.
 
-1. Go to **https://script.google.com** while signed in to the inbox you want to filter, and click **New project**. Name it `SaneMail`.
-2. Delete the sample code, paste in all of `Code.gs`, and save.
-3. Optional: change `CONFIG` at the top of the file, for example by adding `VIP_DOMAINS` such as your employer or your kids' school. For a first test you can set `DRY_RUN: true`; SaneMail will then only log what it would do (see **Executions**).
-4. Choose **setup** in the function dropdown and click **Run**. Approve the permissions. Google will show "unverified app". This is expected because it is your own script: click **Advanced → Go to SaneMail**.
-   setup does the following:
-   - creates the labels
-   - creates a **SaneMail rules** Google Sheet in your Drive
-   - learns your contacts from your last ~1,500 sent threads
-   - sorts the last 2 days of your Inbox
-   - installs triggers to run every 10 minutes and to send the digest at 7am
-5. Optional dashboard and one-click digest links: click **Deploy → New deployment → Web app**, set *Execute as: **Me*** and *Who has access: **Only myself***, then click Deploy. Bookmark the URL. Digest emails will now include action links.
+**Daily digest.** Each morning, a "SaneMail digest" message in your Inbox lists what was filed, with weekly totals.
 
-**Several inboxes:** repeat these steps once in each Google account. Each one keeps its own rules.
+---
 
-## Using it
+## Setup
 
-- **Teach it:** in Gmail, use *Move to* `@SaneLater`, `@SaneNews` or `@SaneBlackHole`. To rescue a sender, open the thread in the label and click *Move to Inbox*. Training takes effect on the next run (within 10 minutes).
-- **Edit rules directly** in the *SaneMail rules* sheet. Set `folder` to `inbox`, `later`, `news` or `blackhole` and `source` to `trained`.
-- **Snooze:** apply `@SaneTomorrow` or `@SaneNextWeek`.
-- **Starred threads** are never moved.
-- The `_sane/…` labels are internal markers. In Gmail settings → Labels you can set them to *Hide* in the label list. Don't delete them.
-- **Stop it:** run `uninstall()`. This removes the triggers and leaves your labels and rules in place.
+### 1. Create the private repository
+1. On GitHub, create a **private** repository, for example `sanemail`.
+2. Put the contents of this folder at the top level of that repository. The workflow must end up at `.github/workflows/sanemail.yml`.
 
-## Notes and limits
+### 2. Own-domain mail (Apple Mail)
+First find your server. On a Mac, open **Mail → Settings → Accounts → (your randlefamily.com account) → Server Settings** and note the **Incoming Mail Server**.
 
-- This version supports Gmail and Google Workspace only. Outlook, iCloud and generic IMAP accounts need a different approach.
-- It uses Google's free Apps Script quotas, which are well above what a personal inbox needs.
-- The first sort of a sender costs one Gmail search. After that the result is cached in the sheet.
+- **iCloud+ custom domain** (server `imap.mail.me.com`):
+  1. Go to account.apple.com → Sign-In and Security → **App-Specific Passwords** and create one called `SaneMail`.
+  2. The username is your **iCloud email address**, not the custom-domain address.
+  3. Add your `@randlefamily.com` addresses under `addresses:`.
+- **Any other host:** use that host's IMAP server and your mailbox password, or an app password if the host offers them.
+
+Edit the `home` account in `config.yaml`. Then in the repository go to **Settings → Secrets and variables → Actions → New repository secret** and add the secret `HOME_IMAP_PASSWORD`.
+
+### 3. Office 365 (needs one-time IT approval)
+Send your IT team this request:
+
+> Please create an app registration in Entra ID for a personal mail-sorting tool:
+> - Name: **SaneMail**. Supported account types: *this organization only*
+> - Authentication → **Allow public client flows: Yes** (it signs in with the device-code flow; there is no client secret)
+> - API permissions (**delegated** Microsoft Graph): `Mail.ReadWrite`, `User.Read`, `offline_access`. Grant admin consent if users can't consent themselves.
+> - Send me the **Application (client) ID** and the **Directory (tenant) ID**.
+>
+> It only acts as me, on my own mailbox (delegated, not application permissions). It moves messages between folders and creates a few folders (SaneLater, SaneNews, SaneBlackHole, SaneTomorrow, SaneNextWeek). It never sends email.
+
+When IT replies:
+1. Put the `client_id` and `tenant` into the `work` account in `config.yaml`.
+2. On your own computer, in this folder, run:
+   ```
+   pip install -r requirements.txt
+   python o365_login.py work
+   ```
+   Sign in with the code it shows.
+3. Copy the contents of the file it creates into a repository secret named `O365_TOKEN_CACHE`, then delete the file.
+
+If you don't have an Office 365 account (or haven't got approval yet), delete the `work` block from `config.yaml` for now.
+
+### 4. Set your timezone and do a test run
+1. Set `timezone:` in `config.yaml`, for example `America/New_York`.
+2. Go to **Actions → SaneMail → Run workflow** and tick **Dry run**. The log shows how many messages would go where, and nothing is moved.
+3. Run it again with Dry run unticked. After that it runs by itself every 30 minutes.
+
+The first real run:
+- learns your contacts from the last year of Sent mail
+- sorts only the last day of your Inbox; older mail is left alone
+
+---
+
+## Good to know
+- **Flagged/starred mail is never moved.** Neither is mail you sent yourself.
+- **State.** Message tracking and the Office 365 sign-in are kept in the GitHub Actions cache. Sender rules are committed to `rules.json`. If the cache is ever lost, SaneMail starts tracking afresh. It won't re-sort your existing Inbox and you don't lose your training.
+- **Failures.** If a run fails, for example after a password change or an expired Office 365 sign-in, GitHub emails you and the log says what to fix.
+- **Cost.** 48 runs a day use about 1,500 of the 2,000 free GitHub Actions minutes a month for private repositories. To use fewer, change the schedule in the workflow, for example `'7 * * * *'` for hourly.
+- **Pausing.** To pause, go to **Actions → SaneMail → ⋯ → Disable workflow**.
+- **Running locally.** You can also run it on a Mac: `pip install -r requirements.txt`, set `HOME_IMAP_PASSWORD` in the environment, then run `python sanemail.py`. Add `SANEMAIL_DRY_RUN=1` to only preview.

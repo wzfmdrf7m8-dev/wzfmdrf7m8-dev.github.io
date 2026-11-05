@@ -1,0 +1,35 @@
+# SaneMail configuration. This file has no passwords; those go in GitHub secrets.
+
+settings:
+  timezone: UTC              # e.g. Europe/London, America/New_York. Used for the digest and snooze times
+  digest_hour: 7             # local hour the daily digest arrives
+  wake_hour: 7               # local hour snoozed mail comes back
+  digest_account: home       # which account's Inbox receives the digest
+  news_into_later: false     # true = newsletters go to SaneLater instead of SaneNews
+  initial_lookback_days: 1   # the first run only sorts this much of the existing Inbox
+  learn_from_sent_days: 365  # the first run learns your contacts from this much Sent mail
+  vip_domains: []            # always Inbox, e.g. [school.org, mybank.com]
+  vip_senders: []            # always Inbox, e.g. [partner@example.com]
+
+accounts:
+  # Mail at your own domain, read in Apple Mail. Ask your mail host for its IMAP server.
+  #   iCloud+ custom domain : host imap.mail.me.com, username = your iCloud email, app-specific password
+  #   Microsoft 365         : use type: o365 below instead
+  #   Google Workspace      : host imap.gmail.com, app password
+  #   Fastmail              : host imap.fastmail.com, app password
+  #   GoDaddy Microsoft 365 : use type: o365 below
+  #   cPanel web hosts      : host mail.<yourdomain>, your mailbox password
+  - name: home
+    type: imap
+    host: imap.mail.me.com
+    username: CHANGE_ME@icloud.com
+    password_secret: HOME_IMAP_PASSWORD   # name of the GitHub secret that holds the password
+    addresses: []                         # other addresses delivered here, e.g. [you@randlefamily.com]
+    # folders: {sent: "Sent Messages", trash: "Deleted Messages"}   # only if auto-detection fails
+
+  # Office 365 / Outlook (work). Needs an app registration that IT approves (see README).
+  - name: work
+    type: o365
+    tenant: CHANGE_ME.com                 # your work email domain, or the tenant ID from IT
+    client_id: 00000000-0000-0000-0000-000000000000   # "Application (client) ID" from IT
+    token_secret: O365_TOKEN_CACHE        # GitHub secret holding the output of o365_login.py
