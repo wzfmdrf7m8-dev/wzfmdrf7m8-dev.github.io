@@ -1,0 +1,62 @@
+name: SaneMail
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'   # every 30 minutes (about 1,500 of the 2,000 free private-repo minutes a month)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run (log only, move nothing)
+        type: boolean
+        default: false
+
+concurrency:
+  group: sanemail
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # to save learned sender rules back to rules.json
+
+jobs:
+  sort:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Restore SaneMail state
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: sanemail-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: sanemail-state-
+
+      - name: Sort mail
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          SANEMAIL_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+        run: python sanemail.py
+
+      - name: Save SaneMail state
+        if: always() && hashFiles('.state/state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: sanemail-state-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save learned sender rules
+        if: always()
+        run: |
+          if ! git diff --quiet -- rules.json; then
+            git config user.name "sanemail-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -q -m "Update sender rules" -- rules.json
+            git pull -q --rebase && git push -q
+          fi

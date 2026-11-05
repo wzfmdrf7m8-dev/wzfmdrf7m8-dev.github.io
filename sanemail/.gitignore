@@ -1,0 +1,4 @@
+.state/
+__pycache__/
+o365-token*.json
+config.local.yaml
